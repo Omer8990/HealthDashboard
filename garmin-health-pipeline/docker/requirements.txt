@@ -1,0 +1,3 @@
+garminconnect==0.2.8
+pandas
+retrying==1.3.4

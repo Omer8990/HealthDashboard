@@ -7,6 +7,7 @@ import os
 from dataclasses import dataclass
 from garminconnect import Garmin, GarminConnectAuthenticationError
 import pandas as pd
+
 from sqlalchemy import create_engine
 from retrying import retry
 
@@ -258,10 +259,11 @@ class GarminDataExtractor:
             df.to_sql(
                 f'staging_{table_name}',
                 self.db_engine,
+                schema='garmin',
                 if_exists='append',
                 index=False
             )
-            logger.info(f"Saved {len(data)} records to staging_{table_name}")
+            logger.info(f"Saved {len(data)} records to garmin.staging_{table_name}")
         except Exception as e:
             logger.error(f"Failed to save data to staging: {e}")
             raise
