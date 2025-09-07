@@ -57,7 +57,7 @@ class GarminDataExtractor:
         """Extract activity data for date range"""
         activities = []
         try:
-            # Get activities list
+            # Get activities list using available method
             activities_list = self.client.get_activities_by_date(
                 start_date.strftime("%Y-%m-%d"),
                 end_date.strftime("%Y-%m-%d")
@@ -65,24 +65,29 @@ class GarminDataExtractor:
             
             for activity in activities_list:
                 activity_id = activity['activityId']
-                # Get detailed activity data
-                detailed = self.client.get_activity_evaluation(activity_id)
+                
+                # Get additional activity details if available
+                detailed = None
+                try:
+                    detailed = self.client.get_activity(activity_id)
+                except Exception:
+                    pass
                 
                 processed_activity = {
                     'activity_id': activity_id,
-                    'activity_type': activity.get('activityType', {}).get('typeKey'),
-                    'activity_name': activity.get('activityName'),
+                    'activity_type': activity.get('activityType', {}).get('typeKey', 'unknown'),
+                    'activity_name': activity.get('activityName', 'Activity'),
                     'start_time': activity.get('startTimeLocal'),
-                    'duration_seconds': activity.get('duration'),
-                    'distance_meters': activity.get('distance'),
-                    'calories': activity.get('calories'),
-                    'avg_heart_rate': activity.get('averageHR'),
-                    'max_heart_rate': activity.get('maxHR'),
-                    'avg_speed': activity.get('averageSpeed'),
-                    'max_speed': activity.get('maxSpeed'),
-                    'elevation_gain': activity.get('elevationGain'),
-                    'elevation_loss': activity.get('elevationLoss'),
-                    'avg_cadence': activity.get('averageRunningCadenceInStepsPerMinute'),
+                    'duration_seconds': activity.get('duration', 0),
+                    'distance_meters': activity.get('distance', 0),
+                    'calories': activity.get('calories', 0),
+                    'avg_heart_rate': activity.get('averageHR', 0),
+                    'max_heart_rate': activity.get('maxHR', 0),
+                    'avg_speed': activity.get('averageSpeed', 0),
+                    'max_speed': activity.get('maxSpeed', 0),
+                    'elevation_gain': activity.get('elevationGain', 0),
+                    'elevation_loss': activity.get('elevationLoss', 0),
+                    'avg_cadence': activity.get('averageRunningCadenceInStepsPerMinute', 0),
                     'training_effect': detailed.get('trainingEffectLabel') if detailed else None,
                     'aerobic_effect': detailed.get('aerobicTrainingEffect') if detailed else None,
                     'anaerobic_effect': detailed.get('anaerobicTrainingEffect') if detailed else None,
@@ -131,6 +136,10 @@ class GarminDataExtractor:
             sleep_data = self.client.get_sleep_data(date.strftime("%Y-%m-%d"))
             
             if sleep_data:
+                # Handle the case where sleep_data might be a list or different structure
+                if isinstance(sleep_data, list):
+                    sleep_data = sleep_data[0] if sleep_data else {}
+                
                 sleep_levels = sleep_data.get('sleepLevels', {})
                 
                 processed_sleep = {
@@ -313,11 +322,24 @@ class GarminDataExtractor:
         """Calculate average heart rate from time series"""
         if not hr_values:
             return None
-            
-        valid_values = [v for v in hr_values if v and v > 0]
-        if valid_values:
-            return sum(valid_values) / len(valid_values)
-        return None
+        
+        # Handle different data structures    
+        try:
+            if isinstance(hr_values, list):
+                # Handle list of values or list of dicts
+                valid_values = []
+                for v in hr_values:
+                    if isinstance(v, dict) and 'value' in v:
+                        if v['value'] and v['value'] > 0:
+                            valid_values.append(v['value'])
+                    elif isinstance(v, (int, float)) and v > 0:
+                        valid_values.append(v)
+                
+                if valid_values:
+                    return sum(valid_values) / len(valid_values)
+            return None
+        except Exception:
+            return None
 
 if __name__ == "__main__":
     # Example usage

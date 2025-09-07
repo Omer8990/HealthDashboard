@@ -1,330 +1,548 @@
-'use client';
-import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
-import { Activity, Brain, Heart, Shield, Trophy, Zap } from 'lucide-react';
-import axios from 'axios';
+'use client'
 
+import { useState, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar } from 'recharts'
+
+// Types
 interface DashboardMetrics {
-  current_bio_age: number;
-  aging_velocity: number;
-  longevity_score: number;
-  years_gained: number;
-  streak_days: number;
-  level: number;
-  xp: number;
+  current_bio_age: number
+  aging_velocity: number
+  longevity_score: number
+  years_gained: number
+  streak_days: number
+  level: number
+  xp: number
 }
 
-interface Protocol {
-  protocol_name: string;
-  target_value: number;
-  actual_value: number;
-  adherence_percentage: number;
-  impact_years: number;
+interface HealthTrends {
+  trends: {
+    dates: string[]
+    resting_heart_rate: number[]
+    total_steps: number[]
+    total_calories: number[]
+    activities_count: number[]
+    biological_age: number[]
+    longevity_score: number[]
+  }
 }
 
-interface Achievement {
-  id: string;
-  name: string;
-  description: string;
-  icon: string;
-  unlocked: boolean;
-  xp_reward: number;
-  unlock_date?: string;
-  progress?: number;
+interface Activity {
+  activity_type: string
+  activity_name: string
+  start_time: string
+  duration_minutes: number
+  distance_km: number
+  calories: number
+  avg_heart_rate: number
+  max_heart_rate: number
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+interface Insight {
+  type: 'achievement' | 'success' | 'recommendation'
+  title: string
+  message: string
+  impact: string
+  icon: string
+}
 
 export default function Dashboard() {
-  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
-  const [protocols, setProtocols] = useState<Protocol[]>([]);
-  const [achievements, setAchievements] = useState<Achievement[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [currentTime, setCurrentTime] = useState(new Date());
-
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
+  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null)
+  const [trends, setTrends] = useState<HealthTrends | null>(null)
+  const [activities, setActivities] = useState<Activity[]>([])
+  const [insights, setInsights] = useState<Insight[]>([])
+  const [activeTab, setActiveTab] = useState<'overview' | 'trends' | 'activities' | 'insights'>('overview')
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [metricsRes, protocolsRes, achievementsRes] = await Promise.all([
-          axios.get(`${API_URL}/api/dashboard/overview`),
-          axios.get(`${API_URL}/api/protocols/adherence`),
-          axios.get(`${API_URL}/api/achievements`)
-        ]);
+        const [metricsRes, trendsRes, activitiesRes, insightsRes] = await Promise.all([
+          fetch('/api/dashboard/overview'),
+          fetch('/api/health/trends?days=30'),
+          fetch('/api/activities/detailed?days=14'),
+          fetch('/api/insights/health')
+        ])
 
-        setMetrics(metricsRes.data);
-        setProtocols(protocolsRes.data.protocols);
-        setAchievements(achievementsRes.data.achievements);
-        setLoading(false);
+        const [metricsData, trendsData, activitiesData, insightsData] = await Promise.all([
+          metricsRes.json(),
+          trendsRes.json(),
+          activitiesRes.json(),
+          insightsRes.json()
+        ])
+
+        setMetrics(metricsData)
+        setTrends(trendsData)
+        setActivities(activitiesData.activities || [])
+        setInsights(insightsData.insights || [])
       } catch (error) {
-        console.error('Error fetching data:', error);
-        setLoading(false);
+        console.error('Error fetching data:', error)
+      } finally {
+        setIsLoading(false)
       }
-    };
+    }
 
-    fetchData();
-  }, []);
+    fetchData()
+    const interval = setInterval(fetchData, 30000) // Refresh every 30s
+    return () => clearInterval(interval)
+  }, [])
 
-  if (loading) {
+  if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen bg-black flex items-center justify-center">
         <motion.div
           animate={{ rotate: 360 }}
           transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-          className="w-16 h-16 border-4 border-cyber-cyan border-t-transparent rounded-full"
+          className="w-16 h-16 border-4 border-cyan-500 border-t-transparent rounded-full"
         />
-        <span className="ml-4 font-mono text-cyber-cyan">INITIALIZING MATRIX...</span>
+        <span className="ml-4 text-cyan-400 text-xl font-mono">LOADING HEALTH MATRIX...</span>
       </div>
-    );
+    )
+  }
+
+  const formatTrendsData = () => {
+    if (!trends?.trends) return []
+    return trends.trends.dates.map((date, i) => ({
+      date: new Date(date).toLocaleDateString(),
+      rhr: trends.trends.resting_heart_rate[i],
+      steps: trends.trends.total_steps[i],
+      bioAge: trends.trends.biological_age[i],
+      longevityScore: trends.trends.longevity_score[i],
+      activities: trends.trends.activities_count[i]
+    }))
+  }
+
+  const activityTypeColors = {
+    running: '#ff6b6b',
+    cycling: '#4ecdc4', 
+    strength_training: '#ffe66d',
+    walking: '#95e1d3',
+    swimming: '#74b9ff',
+    unknown: '#a29bfe'
   }
 
   return (
-    <div className="min-h-screen p-6">
+    <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-black text-white font-mono">
+      {/* Neural Network Background */}
+      <div className="fixed inset-0 opacity-10 pointer-events-none">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(120,119,198,0.3),transparent_70%)]" />
+        {[...Array(50)].map((_, i) => (
+          <motion.div
+            key={i}
+            className="absolute w-1 h-1 bg-cyan-400 rounded-full"
+            style={{
+              left: `${Math.random() * 100}%`,
+              top: `${Math.random() * 100}%`,
+            }}
+            animate={{
+              opacity: [0, 1, 0],
+              scale: [0, 1, 0],
+            }}
+            transition={{
+              duration: Math.random() * 3 + 2,
+              repeat: Infinity,
+              delay: Math.random() * 2,
+            }}
+          />
+        ))}
+      </div>
+
       {/* Header */}
       <motion.header
-        initial={{ y: -50, opacity: 0 }}
+        initial={{ y: -100, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        className="mb-8"
+        className="relative z-10 border-b border-cyan-500/30 bg-black/80 backdrop-blur-sm"
       >
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-4xl font-cyber font-black text-transparent bg-gradient-to-r from-cyber-cyan via-cyber-purple to-cyber-pink bg-clip-text">
-              🧬 LONGEVITY MATRIX
-            </h1>
-            <p className="text-lg font-mono mt-2 text-neon-green">
-              BIOLOGICAL OPTIMIZATION PROTOCOL
-            </p>
-          </div>
-          <div className="text-right font-mono">
-            <div className="text-cyber-cyan text-sm">
-              {currentTime.toLocaleDateString('en-US', { 
-                weekday: 'long', 
-                year: 'numeric', 
-                month: 'long', 
-                day: 'numeric' 
-              })}
+        <div className="container mx-auto px-6 py-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">
+                🧬 LONGEVITY MATRIX
+              </h1>
+              <p className="text-gray-400 mt-1">BIOLOGICAL AGE: {metrics?.current_bio_age.toFixed(1)} YEARS</p>
             </div>
-            <div className="text-cyber-pink text-2xl font-bold">
-              {currentTime.toLocaleTimeString('en-US', { hour12: false })}
+            <div className="flex gap-4">
+              <div className="text-right">
+                <p className="text-cyan-400 font-bold text-xl">LVL {metrics?.level}</p>
+                <p className="text-gray-400">{metrics?.xp.toLocaleString()} XP</p>
+              </div>
+              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-cyan-500 to-purple-500 flex items-center justify-center text-2xl">
+                🏆
+              </div>
             </div>
           </div>
         </div>
       </motion.header>
 
-      {/* Main Metrics Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {/* Biological Age */}
-        <motion.div
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ delay: 0.1 }}
-          className="bg-matrix-surface border border-cyber-cyan rounded-lg p-6 relative overflow-hidden neon-glow"
-        >
-          <div className="scan-line"></div>
-          <div className="flex items-center justify-between mb-4">
-            <Brain className="w-8 h-8 text-cyber-cyan" />
-            <span className="text-xs font-mono text-cyber-cyan opacity-75">BIO.AGE</span>
-          </div>
-          <div className="space-y-2">
-            <div className="text-3xl font-bold text-cyber-pink font-mono">
-              {metrics?.current_bio_age}
-            </div>
-            <div className="text-sm text-cyber-cyan">
-              Aging Rate: <span className="text-neon-green">{metrics?.aging_velocity}%</span>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Longevity Score */}
-        <motion.div
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ delay: 0.2 }}
-          className="bg-matrix-surface border border-neon-green rounded-lg p-6 relative overflow-hidden neon-glow"
-        >
-          <div className="scan-line"></div>
-          <div className="flex items-center justify-between mb-4">
-            <Heart className="w-8 h-8 text-neon-green" />
-            <span className="text-xs font-mono text-neon-green opacity-75">SCORE</span>
-          </div>
-          <div className="space-y-2">
-            <div className="text-3xl font-bold text-neon-green font-mono">
-              {metrics?.longevity_score}/100
-            </div>
-            <div className="text-sm text-cyber-cyan">
-              Years Gained: <span className="text-cyber-pink">+{metrics?.years_gained}</span>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Level & XP */}
-        <motion.div
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ delay: 0.3 }}
-          className="bg-matrix-surface border border-cyber-purple rounded-lg p-6 relative overflow-hidden neon-glow"
-        >
-          <div className="scan-line"></div>
-          <div className="flex items-center justify-between mb-4">
-            <Trophy className="w-8 h-8 text-cyber-purple" />
-            <span className="text-xs font-mono text-cyber-purple opacity-75">LEVEL</span>
-          </div>
-          <div className="space-y-2">
-            <div className="text-3xl font-bold text-cyber-purple font-mono">
-              {metrics?.level}
-            </div>
-            <div className="text-sm text-cyber-cyan">
-              XP: <span className="text-cyber-pink">{metrics?.xp}</span>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Streak */}
-        <motion.div
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ delay: 0.4 }}
-          className="bg-matrix-surface border border-cyber-pink rounded-lg p-6 relative overflow-hidden neon-glow"
-        >
-          <div className="scan-line"></div>
-          <div className="flex items-center justify-between mb-4">
-            <Zap className="w-8 h-8 text-cyber-pink" />
-            <span className="text-xs font-mono text-cyber-pink opacity-75">STREAK</span>
-          </div>
-          <div className="space-y-2">
-            <div className="text-3xl font-bold text-cyber-pink font-mono">
-              {metrics?.streak_days}
-            </div>
-            <div className="text-sm text-cyber-cyan">
-              Days Active
-            </div>
-          </div>
-        </motion.div>
-      </div>
-
-      {/* Protocols Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-        {/* Protocol Adherence */}
-        <motion.div
-          initial={{ x: -50, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          transition={{ delay: 0.5 }}
-          className="bg-matrix-surface border border-matrix-border rounded-lg p-6"
-        >
-          <h2 className="text-2xl font-cyber font-bold text-cyber-cyan mb-6 flex items-center">
-            <Shield className="w-6 h-6 mr-2" />
-            PROTOCOL STATUS
-          </h2>
-          <div className="space-y-4">
-            {protocols.map((protocol, index) => (
-              <motion.div
-                key={protocol.protocol_name}
-                initial={{ x: -20, opacity: 0 }}
-                animate={{ x: 0, opacity: 1 }}
-                transition={{ delay: 0.1 * index }}
-                className="flex items-center justify-between p-4 bg-matrix-bg rounded border border-matrix-border"
-              >
-                <div className="flex-1">
-                  <div className="font-mono text-cyber-cyan font-semibold">
-                    {protocol.protocol_name}
-                  </div>
-                  <div className="text-sm text-gray-400">
-                    {protocol.actual_value}/{protocol.target_value} 
-                    ({protocol.adherence_percentage.toFixed(1)}% adherence)
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className={`font-mono text-lg font-bold ${
-                    protocol.adherence_percentage >= 100 ? 'text-neon-green' :
-                    protocol.adherence_percentage >= 80 ? 'text-cyber-cyan' :
-                    'text-cyber-pink'
-                  }`}>
-                    {protocol.adherence_percentage >= 100 ? '✓' : 
-                     protocol.adherence_percentage >= 80 ? '~' : '✗'}
-                  </div>
-                  <div className="text-xs text-cyber-purple">
-                    +{protocol.impact_years}y
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </motion.div>
-
-        {/* Achievements */}
-        <motion.div
-          initial={{ x: 50, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          transition={{ delay: 0.6 }}
-          className="bg-matrix-surface border border-matrix-border rounded-lg p-6"
-        >
-          <h2 className="text-2xl font-cyber font-bold text-cyber-cyan mb-6 flex items-center">
-            <Trophy className="w-6 h-6 mr-2" />
-            ACHIEVEMENTS
-          </h2>
-          <div className="space-y-4">
-            {achievements.map((achievement, index) => (
-              <motion.div
-                key={achievement.id}
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.1 * index }}
-                className={`flex items-center p-4 rounded border ${
-                  achievement.unlocked 
-                    ? 'bg-matrix-bg border-neon-green' 
-                    : 'bg-gray-900 border-gray-600 opacity-60'
+      {/* Navigation */}
+      <nav className="relative z-10 bg-black/60 backdrop-blur-sm border-b border-gray-800">
+        <div className="container mx-auto px-6">
+          <div className="flex space-x-8">
+            {(['overview', 'trends', 'activities', 'insights'] as const).map((tab) => (
+              <motion.button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`py-4 px-2 font-medium transition-colors relative ${
+                  activeTab === tab ? 'text-cyan-400' : 'text-gray-400 hover:text-white'
                 }`}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
               >
-                <div className="text-2xl mr-4">{achievement.icon}</div>
-                <div className="flex-1">
-                  <div className={`font-mono font-semibold ${
-                    achievement.unlocked ? 'text-neon-green' : 'text-gray-400'
-                  }`}>
-                    {achievement.name}
-                  </div>
-                  <div className="text-sm text-gray-400">
-                    {achievement.description}
-                  </div>
-                  {!achievement.unlocked && achievement.progress && (
-                    <div className="mt-2 bg-gray-800 rounded-full h-2">
-                      <div 
-                        className="bg-cyber-cyan h-2 rounded-full transition-all"
-                        style={{ width: `${achievement.progress}%` }}
-                      ></div>
-                    </div>
-                  )}
-                </div>
-                <div className="text-right">
-                  <div className="text-cyber-purple font-mono text-sm">
-                    {achievement.xp_reward} XP
-                  </div>
-                  {achievement.unlocked && achievement.unlock_date && (
-                    <div className="text-xs text-gray-500">
-                      {new Date(achievement.unlock_date).toLocaleDateString()}
-                    </div>
-                  )}
-                </div>
-              </motion.div>
+                {tab.toUpperCase()}
+                {activeTab === tab && (
+                  <motion.div
+                    layoutId="activeTab"
+                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-cyan-400"
+                  />
+                )}
+              </motion.button>
             ))}
           </div>
-        </motion.div>
-      </div>
+        </div>
+      </nav>
+
+      <main className="container mx-auto px-6 py-8 relative z-10">
+        <AnimatePresence mode="wait">
+          {activeTab === 'overview' && (
+            <motion.div
+              key="overview"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="space-y-8"
+            >
+              {/* Key Metrics */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <motion.div
+                  whileHover={{ scale: 1.05, rotateY: 5 }}
+                  className="bg-gradient-to-br from-gray-900 to-gray-800 border border-cyan-500/30 rounded-xl p-6 relative overflow-hidden"
+                >
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-cyan-500/10 rounded-full -mr-10 -mt-10" />
+                  <div className="relative">
+                    <p className="text-gray-400 text-sm mb-1">BIOLOGICAL AGE</p>
+                    <p className="text-3xl font-bold text-cyan-400">{metrics?.current_bio_age.toFixed(1)}</p>
+                    <p className="text-green-400 text-sm mt-2">
+                      {metrics && metrics.years_gained > 0 ? '+' : ''}{metrics?.years_gained.toFixed(1)} years vs chronological
+                    </p>
+                  </div>
+                </motion.div>
+
+                <motion.div
+                  whileHover={{ scale: 1.05, rotateY: 5 }}
+                  className="bg-gradient-to-br from-gray-900 to-gray-800 border border-purple-500/30 rounded-xl p-6 relative overflow-hidden"
+                >
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-purple-500/10 rounded-full -mr-10 -mt-10" />
+                  <div className="relative">
+                    <p className="text-gray-400 text-sm mb-1">LONGEVITY SCORE</p>
+                    <p className="text-3xl font-bold text-purple-400">{metrics?.longevity_score}/100</p>
+                    <p className={`text-sm mt-2 ${(metrics?.longevity_score || 0) >= 90 ? 'text-green-400' : 'text-yellow-400'}`}>
+                      {(metrics?.longevity_score || 0) >= 90 ? 'ELITE STATUS' : 'OPTIMIZING'}
+                    </p>
+                  </div>
+                </motion.div>
+
+                <motion.div
+                  whileHover={{ scale: 1.05, rotateY: 5 }}
+                  className="bg-gradient-to-br from-gray-900 to-gray-800 border border-green-500/30 rounded-xl p-6 relative overflow-hidden"
+                >
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-green-500/10 rounded-full -mr-10 -mt-10" />
+                  <div className="relative">
+                    <p className="text-gray-400 text-sm mb-1">AGING VELOCITY</p>
+                    <p className="text-3xl font-bold text-green-400">
+                      {((metrics?.aging_velocity || 0) * 100).toFixed(1)}%
+                    </p>
+                    <p className="text-green-400 text-sm mt-2">
+                      {(metrics?.aging_velocity || 0) < 0 ? 'AGING SLOWER' : 'AGING FASTER'}
+                    </p>
+                  </div>
+                </motion.div>
+
+                <motion.div
+                  whileHover={{ scale: 1.05, rotateY: 5 }}
+                  className="bg-gradient-to-br from-gray-900 to-gray-800 border border-orange-500/30 rounded-xl p-6 relative overflow-hidden"
+                >
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-orange-500/10 rounded-full -mr-10 -mt-10" />
+                  <div className="relative">
+                    <p className="text-gray-400 text-sm mb-1">ACTIVITY STREAK</p>
+                    <p className="text-3xl font-bold text-orange-400">{metrics?.streak_days}</p>
+                    <p className="text-orange-400 text-sm mt-2">DAYS ACTIVE</p>
+                  </div>
+                </motion.div>
+              </div>
+            </motion.div>
+          )}
+
+          {activeTab === 'trends' && (
+            <motion.div
+              key="trends"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="space-y-8"
+            >
+              <h2 className="text-2xl font-bold text-cyan-400">HEALTH TRENDS ANALYSIS</h2>
+              
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Heart Rate Trends */}
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-gradient-to-br from-gray-900 to-gray-800 border border-red-500/30 rounded-xl p-6"
+                >
+                  <h3 className="text-lg font-bold mb-4 text-red-400">RESTING HEART RATE</h3>
+                  <div className="h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={formatTrendsData()}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                        <XAxis dataKey="date" stroke="#9CA3AF" />
+                        <YAxis stroke="#9CA3AF" />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#1F2937',
+                            border: '1px solid #374151',
+                            borderRadius: '8px',
+                            color: '#fff'
+                          }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="rhr"
+                          stroke="#EF4444"
+                          strokeWidth={3}
+                          dot={{ fill: '#EF4444', strokeWidth: 2, r: 4 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </motion.div>
+
+                {/* Steps Trends */}
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 }}
+                  className="bg-gradient-to-br from-gray-900 to-gray-800 border border-green-500/30 rounded-xl p-6"
+                >
+                  <h3 className="text-lg font-bold mb-4 text-green-400">DAILY STEPS</h3>
+                  <div className="h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={formatTrendsData()}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                        <XAxis dataKey="date" stroke="#9CA3AF" />
+                        <YAxis stroke="#9CA3AF" />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#1F2937',
+                            border: '1px solid #374151',
+                            borderRadius: '8px',
+                            color: '#fff'
+                          }}
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey="steps"
+                          stroke="#10B981"
+                          fill="#10B981"
+                          fillOpacity={0.3}
+                          strokeWidth={2}
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </motion.div>
+
+                {/* Biological Age Trends */}
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 }}
+                  className="bg-gradient-to-br from-gray-900 to-gray-800 border border-purple-500/30 rounded-xl p-6"
+                >
+                  <h3 className="text-lg font-bold mb-4 text-purple-400">BIOLOGICAL AGE</h3>
+                  <div className="h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={formatTrendsData()}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                        <XAxis dataKey="date" stroke="#9CA3AF" />
+                        <YAxis stroke="#9CA3AF" />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#1F2937',
+                            border: '1px solid #374151',
+                            borderRadius: '8px',
+                            color: '#fff'
+                          }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="bioAge"
+                          stroke="#A855F7"
+                          strokeWidth={3}
+                          dot={{ fill: '#A855F7', strokeWidth: 2, r: 4 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </motion.div>
+
+                {/* Activity Frequency */}
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 }}
+                  className="bg-gradient-to-br from-gray-900 to-gray-800 border border-blue-500/30 rounded-xl p-6"
+                >
+                  <h3 className="text-lg font-bold mb-4 text-blue-400">ACTIVITY FREQUENCY</h3>
+                  <div className="h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={formatTrendsData()}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                        <XAxis dataKey="date" stroke="#9CA3AF" />
+                        <YAxis stroke="#9CA3AF" />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#1F2937',
+                            border: '1px solid #374151',
+                            borderRadius: '8px',
+                            color: '#fff'
+                          }}
+                        />
+                        <Bar dataKey="activities" fill="#3B82F6" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </motion.div>
+              </div>
+            </motion.div>
+          )}
+
+          {activeTab === 'activities' && (
+            <motion.div
+              key="activities"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="space-y-8"
+            >
+              <h2 className="text-2xl font-bold text-cyan-400">ACTIVITY LOG</h2>
+              
+              <div className="grid gap-4">
+                {activities.map((activity, index) => (
+                  <motion.div
+                    key={index}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    whileHover={{ scale: 1.02 }}
+                    className="bg-gradient-to-br from-gray-900 to-gray-800 border border-gray-700 rounded-xl p-6 hover:border-cyan-500/30 transition-colors"
+                  >
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-center space-x-4">
+                        <div 
+                          className="w-4 h-4 rounded-full"
+                          style={{ backgroundColor: (activityTypeColors as any)[activity.activity_type] || activityTypeColors.unknown }}
+                        />
+                        <div>
+                          <h3 className="font-bold text-white">{activity.activity_name}</h3>
+                          <p className="text-gray-400 text-sm">{new Date(activity.start_time).toLocaleString()}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-cyan-400 font-bold">{activity.calories} cal</p>
+                        <p className="text-gray-400 text-sm">{activity.duration_minutes.toFixed(0)} min</p>
+                      </div>
+                    </div>
+                    <div className="mt-4 grid grid-cols-4 gap-4 text-center">
+                      <div>
+                        <p className="text-gray-400 text-xs">DISTANCE</p>
+                        <p className="text-white font-bold">{activity.distance_km.toFixed(1)} km</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400 text-xs">AVG HR</p>
+                        <p className="text-red-400 font-bold">{activity.avg_heart_rate} bpm</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400 text-xs">MAX HR</p>
+                        <p className="text-red-500 font-bold">{activity.max_heart_rate} bpm</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400 text-xs">TYPE</p>
+                        <p className="text-white font-bold capitalize">{activity.activity_type.replace('_', ' ')}</p>
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+
+          {activeTab === 'insights' && (
+            <motion.div
+              key="insights"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="space-y-8"
+            >
+              <h2 className="text-2xl font-bold text-cyan-400">AI HEALTH INSIGHTS</h2>
+              
+              <div className="grid gap-6">
+                {insights.map((insight, index) => (
+                  <motion.div
+                    key={index}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.1 }}
+                    whileHover={{ scale: 1.02 }}
+                    className={`bg-gradient-to-br from-gray-900 to-gray-800 border rounded-xl p-6 ${
+                      insight.type === 'achievement' ? 'border-yellow-500/30' :
+                      insight.type === 'success' ? 'border-green-500/30' :
+                      'border-blue-500/30'
+                    }`}
+                  >
+                    <div className="flex items-start space-x-4">
+                      <div className="text-3xl">{insight.icon}</div>
+                      <div className="flex-1">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h3 className={`font-bold text-lg ${
+                              insight.type === 'achievement' ? 'text-yellow-400' :
+                              insight.type === 'success' ? 'text-green-400' :
+                              'text-blue-400'
+                            }`}>
+                              {insight.title}
+                            </h3>
+                            <p className="text-gray-300 mt-2">{insight.message}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className={`font-bold ${
+                              insight.type === 'achievement' ? 'text-yellow-400' :
+                              insight.type === 'success' ? 'text-green-400' :
+                              'text-blue-400'
+                            }`}>
+                              {insight.impact}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </main>
 
       {/* Footer */}
-      <motion.footer
-        initial={{ y: 50, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.8 }}
-        className="text-center py-8 border-t border-matrix-border"
-      >
-        <p className="font-mono text-cyber-cyan text-sm glitch">
-          🧬 HACK YOUR BIOLOGY • REVERSE YOUR AGE • REACH THE FUTURE 🚀
-        </p>
-      </motion.footer>
+      <footer className="relative z-10 border-t border-gray-800 bg-black/80 backdrop-blur-sm mt-16">
+        <div className="container mx-auto px-6 py-4">
+          <div className="flex justify-between items-center">
+            <p className="text-gray-400">LONGEVITY MATRIX v2.0 | POWERED BY GARMIN DATA</p>
+            <p className="text-gray-400">LAST SYNC: {new Date().toLocaleTimeString()}</p>
+          </div>
+        </div>
+      </footer>
     </div>
-  );
+  )
 }
