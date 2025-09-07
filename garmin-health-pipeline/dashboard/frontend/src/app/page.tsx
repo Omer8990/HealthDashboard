@@ -58,10 +58,10 @@ export default function Dashboard() {
     const fetchData = async () => {
       try {
         const [metricsRes, trendsRes, activitiesRes, insightsRes] = await Promise.all([
-          fetch('/api/dashboard/overview'),
-          fetch('/api/health/trends?days=30'),
-          fetch('/api/activities/detailed?days=14'),
-          fetch('/api/insights/health')
+          fetch('http://localhost:8000/api/dashboard/overview'),
+          fetch('http://localhost:8000/api/health/trends?days=30'),
+          fetch('http://localhost:8000/api/activities/detailed?days=14'),
+          fetch('http://localhost:8000/api/insights/health')
         ])
 
         const [metricsData, trendsData, activitiesData, insightsData] = await Promise.all([
