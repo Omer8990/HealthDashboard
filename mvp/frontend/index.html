@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🧬 Garmin Longevity Matrix MVP</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Monaco', 'Menlo', monospace; 
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
+            color: #00ff9f; 
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+        .header { text-align: center; margin-bottom: 3rem; }
+        .header h1 { 
+            font-size: 3rem; 
+            margin-bottom: 0.5rem; 
+            text-shadow: 0 0 20px #00ff9f; 
+            animation: glow 2s ease-in-out infinite alternate;
+        }
+        @keyframes glow {
+            from { text-shadow: 0 0 20px #00ff9f; }
+            to { text-shadow: 0 0 30px #00ff9f, 0 0 40px #00ff9f; }
+        }
+        .subtitle { color: #64ffda; font-size: 1.2rem; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; }
+        .card { 
+            background: rgba(0, 255, 159, 0.1); 
+            border: 1px solid #00ff9f; 
+            border-radius: 10px; 
+            padding: 1.5rem;
+            backdrop-filter: blur(10px);
+        }
+        .card h2 { color: #64ffda; margin-bottom: 1rem; font-size: 1.5rem; }
+        .metric { 
+            display: flex; 
+            justify-content: space-between; 
+            margin-bottom: 0.8rem; 
+            padding: 0.5rem 0;
+            border-bottom: 1px solid rgba(0, 255, 159, 0.2);
+        }
+        .metric:last-child { border-bottom: none; }
+        .metric-value { color: #ff6b6b; font-weight: bold; font-size: 1.2rem; }
+        .activity { 
+            background: rgba(100, 255, 218, 0.1); 
+            padding: 1rem; 
+            margin-bottom: 1rem; 
+            border-radius: 8px;
+            border-left: 4px solid #64ffda;
+        }
+        .activity-type { color: #ff6b6b; font-weight: bold; text-transform: uppercase; }
+        .activity-details { color: #00ff9f; margin-top: 0.5rem; }
+        .loading { text-align: center; color: #64ffda; font-size: 1.2rem; }
+        .error { color: #ff6b6b; text-align: center; font-size: 1.1rem; }
+        .api-status { 
+            position: fixed; 
+            top: 20px; 
+            right: 20px; 
+            background: rgba(0, 255, 159, 0.2); 
+            padding: 0.5rem 1rem; 
+            border-radius: 20px;
+            font-size: 0.9rem;
+        }
+        .status-ok { color: #00ff9f; }
+        .status-error { color: #ff6b6b; }
+    </style>
+</head>
+<body>
+    <div class="api-status" id="apiStatus">
+        <span class="status-error">● API Connecting...</span>
+    </div>
+
+    <div class="container">
+        <div class="header">
+            <h1>🧬 GARMIN LONGEVITY MATRIX</h1>
+            <p class="subtitle">Production MVP Dashboard</p>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h2>📊 Longevity Metrics</h2>
+                <div id="metrics" class="loading">Loading metrics...</div>
+            </div>
+
+            <div class="card">
+                <h2>🏃 Recent Activities</h2>
+                <div id="activities" class="loading">Loading activities...</div>
+            </div>
+
+            <div class="card">
+                <h2>💡 Health Insights</h2>
+                <div id="insights" class="loading">Loading insights...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api';
+        
+        async function fetchAPI(endpoint) {
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                return await response.json();
+            } catch (error) {
+                console.error(`API Error (${endpoint}):`, error);
+                throw error;
+            }
+        }
+
+        async function updateAPIStatus(success) {
+            const status = document.getElementById('apiStatus');
+            if (success) {
+                status.innerHTML = '<span class="status-ok">● API Connected</span>';
+            } else {
+                status.innerHTML = '<span class="status-error">● API Error</span>';
+            }
+        }
+
+        async function loadMetrics() {
+            try {
+                const data = await fetchAPI('/dashboard/overview');
+                const metricsDiv = document.getElementById('metrics');
+                metricsDiv.innerHTML = `
+                    <div class="metric">
+                        <span>Biological Age</span>
+                        <span class="metric-value">${data.current_bio_age} years</span>
+                    </div>
+                    <div class="metric">
+                        <span>Aging Velocity</span>
+                        <span class="metric-value">${(data.aging_velocity * 100).toFixed(1)}%</span>
+                    </div>
+                    <div class="metric">
+                        <span>Longevity Score</span>
+                        <span class="metric-value">${data.longevity_score}/100</span>
+                    </div>
+                    <div class="metric">
+                        <span>Years Gained</span>
+                        <span class="metric-value">+${data.years_gained.toFixed(1)} years</span>
+                    </div>
+                    <div class="metric">
+                        <span>Activity Streak</span>
+                        <span class="metric-value">${data.streak_days} days</span>
+                    </div>
+                    <div class="metric">
+                        <span>Level</span>
+                        <span class="metric-value">Level ${data.level} (${data.xp} XP)</span>
+                    </div>
+                `;
+                updateAPIStatus(true);
+            } catch (error) {
+                document.getElementById('metrics').innerHTML = `<div class="error">Failed to load metrics</div>`;
+                updateAPIStatus(false);
+            }
+        }
+
+        async function loadActivities() {
+            try {
+                const data = await fetchAPI('/activities/recent');
+                const activitiesDiv = document.getElementById('activities');
+                if (data.activities.length === 0) {
+                    activitiesDiv.innerHTML = '<div class="error">No activities found</div>';
+                    return;
+                }
+                
+                activitiesDiv.innerHTML = data.activities.map(activity => `
+                    <div class="activity">
+                        <div class="activity-type">${activity.activity_type} - ${activity.activity_name}</div>
+                        <div class="activity-details">
+                            ${activity.duration_minutes.toFixed(0)}min • ${activity.distance_km.toFixed(1)}km • ${activity.calories}cal<br>
+                            ❤️ ${activity.avg_heart_rate}-${activity.max_heart_rate} bpm • ${new Date(activity.start_time).toLocaleDateString()}
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                document.getElementById('activities').innerHTML = `<div class="error">Failed to load activities</div>`;
+            }
+        }
+
+        async function loadInsights() {
+            try {
+                const data = await fetchAPI('/insights/health');
+                const insightsDiv = document.getElementById('insights');
+                if (data.insights.length === 0) {
+                    insightsDiv.innerHTML = '<div class="error">No insights available</div>';
+                    return;
+                }
+                
+                insightsDiv.innerHTML = data.insights.map(insight => `
+                    <div class="activity">
+                        <div class="activity-type">${insight.icon} ${insight.title}</div>
+                        <div class="activity-details">
+                            ${insight.message}<br>
+                            <strong>Impact:</strong> ${insight.impact}
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                document.getElementById('insights').innerHTML = `<div class="error">Failed to load insights</div>`;
+            }
+        }
+
+        // Load all data
+        async function loadDashboard() {
+            await Promise.all([
+                loadMetrics(),
+                loadActivities(),
+                loadInsights()
+            ]);
+        }
+
+        // Initial load
+        loadDashboard();
+
+        // Auto-refresh every 30 seconds
+        setInterval(loadDashboard, 30000);
+    </script>
+</body>
+</html>
